@@ -118,6 +118,44 @@ func TestParseHistoryParams_AutoStepLargerWindow(t *testing.T) {
 	}
 }
 
+func TestParseHistoryParams_Last(t *testing.T) {
+	before := time.Now()
+	r := makeRequest(map[string]string{"last": "7d"})
+	start, end, _, err := parseHistoryParams(r)
+	after := time.Now()
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if end.Before(before) || end.After(after) {
+		t.Errorf("end not near now: %v", end)
+	}
+	if diff := end.Sub(start); diff < 7*24*time.Hour-time.Second || diff > 7*24*time.Hour+time.Second {
+		t.Errorf("expected ~7d window, got %v", diff)
+	}
+}
+
+func TestParseHistoryParams_LastOverridesStartEnd(t *testing.T) {
+	r := makeRequest(map[string]string{
+		"last":  "1d",
+		"start": "1704067200",
+		"end":   "1704088800",
+	})
+	_, _, _, err := parseHistoryParams(r)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// last takes precedence — no start-after-end error despite conflicting params
+}
+
+func TestParseHistoryParams_LastInvalid(t *testing.T) {
+	r := makeRequest(map[string]string{"last": "invalid"})
+	_, _, _, err := parseHistoryParams(r)
+	if err == nil {
+		t.Fatal("expected error for invalid last param")
+	}
+}
+
 func TestParseHistoryParams_StartAfterEnd(t *testing.T) {
 	r := makeRequest(map[string]string{
 		"start": "1704088800",

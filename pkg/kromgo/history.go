@@ -86,27 +86,38 @@ func parseTimeParam(s string) (time.Time, error) {
 func parseHistoryParams(r *http.Request) (start, end time.Time, step time.Duration, err error) {
 	now := time.Now()
 
-	// Parse end
-	end = now
-	if s := r.URL.Query().Get("end"); s != "" {
-		end, err = parseTimeParam(s)
+	// last=7d is shorthand for start=now-7d&end=now
+	if s := r.URL.Query().Get("last"); s != "" {
+		var d time.Duration
+		d, err = parseDuration(s)
 		if err != nil {
 			return
 		}
-	}
+		end = now
+		start = now.Add(-d)
+	} else {
+		// Parse end
+		end = now
+		if s := r.URL.Query().Get("end"); s != "" {
+			end, err = parseTimeParam(s)
+			if err != nil {
+				return
+			}
+		}
 
-	// Parse start
-	start = end.Add(-1 * time.Hour)
-	if s := r.URL.Query().Get("start"); s != "" {
-		start, err = parseTimeParam(s)
-		if err != nil {
+		// Parse start
+		start = end.Add(-1 * time.Hour)
+		if s := r.URL.Query().Get("start"); s != "" {
+			start, err = parseTimeParam(s)
+			if err != nil {
+				return
+			}
+		}
+
+		if start.After(end) {
+			err = errStartAfterEnd
 			return
 		}
-	}
-
-	if start.After(end) {
-		err = errStartAfterEnd
-		return
 	}
 
 	// Parse step
