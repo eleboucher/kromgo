@@ -202,7 +202,7 @@ func (h *KromgoHandler) handleChart(w http.ResponseWriter, r *http.Request, metr
 		return
 	}
 
-	if window := end.Sub(start); window > h.historyMaxDuration(metric) {
+	if maxDur := h.historyMaxDuration(metric); maxDur > 0 && end.Sub(start) > maxDur {
 		HandleError(w, r, metric.Name, "Requested time window exceeds maximum allowed duration", http.StatusBadRequest)
 		return
 	}
