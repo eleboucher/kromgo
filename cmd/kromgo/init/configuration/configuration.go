@@ -38,6 +38,15 @@ type KromgoConfig struct {
 	// HideAll sets the default visibility for all metrics on the index page.
 	// Defaults to true (all hidden) when not specified.
 	HideAll    *bool             `yaml:"hideAll,omitempty" json:"hideAll,omitempty"`
+	// History controls access to format=history requests.
+	History    HistoryConfig     `yaml:"history,omitempty" json:"history,omitempty"`
+}
+
+type HistoryConfig struct {
+	// Enabled must be true to allow format=history requests. Defaults to false.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// MaxDuration caps the time window per request (e.g. "24h", "168h"). Defaults to "1h".
+	MaxDuration string `yaml:"maxDuration,omitempty" json:"maxDuration,omitempty"`
 }
 
 type Metric struct {
@@ -62,6 +71,16 @@ type Metric struct {
 	// Hidden controls whether this metric appears on the index page.
 	// If nil, the global HideAll setting is used (default: true).
 	Hidden *bool `yaml:"hidden,omitempty" json:"hidden,omitempty"`
+	// History controls format=history access for this metric.
+	// If nil, the global history settings are used.
+	History *MetricHistoryConfig `yaml:"history,omitempty" json:"history,omitempty"`
+}
+
+type MetricHistoryConfig struct {
+	// Enabled overrides the global history.enabled for this metric.
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// MaxDuration overrides the global history.maxDuration for this metric (e.g. "24h").
+	MaxDuration string `yaml:"maxDuration,omitempty" json:"maxDuration,omitempty"`
 }
 
 type MetricColor struct {

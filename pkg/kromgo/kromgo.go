@@ -78,6 +78,16 @@ func (h *KromgoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if requestFormat == "history" {
+		h.handleHistory(w, r, metric)
+		return
+	}
+
+	if requestFormat == "chart" {
+		h.handleChart(w, r, metric)
+		return
+	}
+
 	// Run the Prometheus query
 	// potentially utilize withlimit or withtimeout
 	promResult, warnings, err := prometheus.Papi.Query(r.Context(), metric.Query, time.Now())
