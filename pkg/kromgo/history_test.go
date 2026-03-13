@@ -257,3 +257,102 @@ func TestHistoryMaxDuration_InvalidFallsBackToDefault(t *testing.T) {
 		t.Errorf("expected fallback to 1h, got %v", d)
 	}
 }
+
+func TestHistoryMaxDuration_Unlimited(t *testing.T) {
+	h := newHandler(configuration.HistoryConfig{MaxDuration: "0"})
+	metric := configuration.Metric{Name: "test"}
+	if d := h.historyMaxDuration(metric); d != 0 {
+		t.Errorf("expected 0 (unlimited), got %v", d)
+	}
+}
+
+func TestParseDuration_Days(t *testing.T) {
+	d, err := parseDuration("7d")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d != 7*24*time.Hour {
+		t.Errorf("expected 168h, got %v", d)
+	}
+}
+
+func TestParseDuration_Years(t *testing.T) {
+	d, err := parseDuration("1y")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d != 365*24*time.Hour {
+		t.Errorf("expected 8760h, got %v", d)
+	}
+}
+
+func TestParseDuration_Combined(t *testing.T) {
+	d, err := parseDuration("1y30d")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d != (365+30)*24*time.Hour {
+		t.Errorf("expected %v, got %v", (365+30)*24*time.Hour, d)
+	}
+}
+
+func TestParseDuration_DaysAndHours(t *testing.T) {
+	d, err := parseDuration("1d12h")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d != 36*time.Hour {
+		t.Errorf("expected 36h, got %v", d)
+	}
+}
+
+func TestParseDuration_StandardUnits(t *testing.T) {
+	cases := map[string]time.Duration{
+		"30m":  30 * time.Minute,
+		"6h":   6 * time.Hour,
+		"90s":  90 * time.Second,
+		"500ms": 500 * time.Millisecond,
+	}
+	for s, want := range cases {
+		d, err := parseDuration(s)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", s, err)
+			continue
+		}
+		if d != want {
+			t.Errorf("%s: expected %v, got %v", s, want, d)
+		}
+	}
+}
+
+func TestParseDuration_Zero(t *testing.T) {
+	d, err := parseDuration("0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d != 0 {
+		t.Errorf("expected 0, got %v", d)
+	}
+}
+
+func TestParseDuration_Invalid(t *testing.T) {
+	_, err := parseDuration("invalid")
+	if err == nil {
+		t.Fatal("expected error for invalid duration")
+	}
+}
+
+func TestParseHistoryParams_StepDays(t *testing.T) {
+	r := makeRequest(map[string]string{
+		"start": "1704067200",
+		"end":   "1704672000", // +7d
+		"step":  "1d",
+	})
+	_, _, step, err := parseHistoryParams(r)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if step != 24*time.Hour {
+		t.Errorf("expected 24h step, got %v", step)
+	}
+}
