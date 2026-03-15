@@ -2,6 +2,7 @@ package kromgo
 
 import (
 	"fmt"
+	"html"
 	"math"
 	"net/http"
 	"sort"
@@ -27,16 +28,18 @@ type chartParams struct {
 	legend      bool
 }
 
+const maxChartDimension = 2048
+
 func parseChartParams(r *http.Request) chartParams {
 	p := chartParams{width: 300, height: 80, strokeWidth: 2, legend: true}
 	if s := r.URL.Query().Get("width"); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 {
-			p.width = v
+			p.width = min(v, maxChartDimension)
 		}
 	}
 	if s := r.URL.Query().Get("height"); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 {
-			p.height = v
+			p.height = min(v, maxChartDimension)
 		}
 	}
 	if s := r.URL.Query().Get("stroke"); s != "" {
@@ -181,7 +184,7 @@ func renderSparkline(matrix model.Matrix, p chartParams, metricColors []configur
 				x, lineY, x+legendIndicatorW, lineY, item.color)
 			x += legendIndicatorW + legendIndicatorGap
 			fmt.Fprintf(&sb, `<text x="%.2f" y="%.2f" font-family="sans-serif" font-size="%d" fill="#666">%s</text>`,
-				x, textY, legendFontSize, item.label)
+				x, textY, legendFontSize, html.EscapeString(item.label))
 			x += float64(len(item.label))*legendCharWidth + legendItemMargin
 		}
 	}
