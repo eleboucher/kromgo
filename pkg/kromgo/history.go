@@ -2,15 +2,11 @@ package kromgo
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/kashalls/kromgo/cmd/kromgo/init/configuration"
-	"github.com/kashalls/kromgo/cmd/kromgo/init/log"
 	"github.com/kashalls/kromgo/cmd/kromgo/init/prometheus"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
@@ -36,44 +32,6 @@ type HistoryResponse struct {
 	Series []HistorySeries `json:"series"`
 }
 
-// durationUnitRe matches a numeric value followed by a custom unit (y or d).
-var durationUnitRe = regexp.MustCompile(`(\d+(?:\.\d+)?)(y|d)`)
-
-// parseDuration extends time.ParseDuration with support for days (d) and years (y).
-// Units can be combined in any order: "1y30d", "7d12h", "3d5y", "2d".
-// A value of "0" means unlimited (only meaningful for maxDuration config).
-func parseDuration(s string) (time.Duration, error) {
-	if s == "" {
-		return 0, fmt.Errorf("empty duration")
-	}
-
-	multipliers := map[string]time.Duration{
-		"y": 365 * 24 * time.Hour,
-		"d": 24 * time.Hour,
-	}
-
-	var total time.Duration
-	remaining := s
-	for _, m := range durationUnitRe.FindAllStringSubmatch(s, -1) {
-		n, err := strconv.ParseFloat(m[1], 64)
-		if err != nil {
-			return 0, fmt.Errorf("invalid duration %q", s)
-		}
-		total += time.Duration(float64(multipliers[m[2]]) * n)
-		remaining = strings.Replace(remaining, m[0], "", 1)
-	}
-
-	if remaining != "" {
-		d, err := time.ParseDuration(remaining)
-		if err != nil {
-			return 0, fmt.Errorf("invalid duration %q", s)
-		}
-		total += d
-	}
-
-	return total, nil
-}
-
 func parseTimeParam(s string) (time.Time, error) {
 	// Try Unix timestamp (integer)
 	if ts, err := strconv.ParseInt(s, 10, 64); err == nil {
@@ -89,7 +47,7 @@ func parseHistoryParams(r *http.Request) (start, end time.Time, step time.Durati
 	// last=7d is shorthand for start=now-7d&end=now
 	if s := r.URL.Query().Get("last"); s != "" {
 		var d time.Duration
-		d, err = parseDuration(s)
+		d, err = configuration.ParseDuration(s)
 		if err != nil {
 			return
 		}
@@ -124,7 +82,7 @@ func parseHistoryParams(r *http.Request) (start, end time.Time, step time.Durati
 	minStep := time.Minute
 	step = max(end.Sub(start)/100, minStep)
 	if s := r.URL.Query().Get("step"); s != "" {
-		step, err = parseDuration(s)
+		step, err = configuration.ParseDuration(s)
 		if err != nil {
 			return
 		}
@@ -148,32 +106,28 @@ func (h *KromgoHandler) historyEnabled(metric configuration.Metric) bool {
 }
 
 func (h *KromgoHandler) historyMaxDuration(metric configuration.Metric) time.Duration {
+	// Values are validated at startup by configuration.Init, so Parse cannot fail here.
 	if metric.History != nil && metric.History.MaxDuration != "" {
-		d, err := parseDuration(metric.History.MaxDuration)
-		if err != nil {
-			log.Error("invalid history.maxDuration for metric", zap.String("metric", metric.Name), zap.String("value", metric.History.MaxDuration), zap.Error(err))
-		} else {
-			return d
-		}
+		d, _ := configuration.ParseDuration(metric.History.MaxDuration)
+		return d
 	}
 	if h.Config.History.MaxDuration != "" {
-		d, err := parseDuration(h.Config.History.MaxDuration)
-		if err != nil {
-			log.Error("invalid global history.maxDuration", zap.String("value", h.Config.History.MaxDuration), zap.Error(err))
-		} else {
-			return d
-		}
+		d, _ := configuration.ParseDuration(h.Config.History.MaxDuration)
+		return d
 	}
 	return time.Hour
 }
 
-func (h *KromgoHandler) handleHistory(w http.ResponseWriter, r *http.Request, metric configuration.Metric) {
+// validateHistoryAccess checks access control, parses time parameters, and enforces
+// the max duration cap. Returns ok=false if an error response was already written.
+func (h *KromgoHandler) validateHistoryAccess(w http.ResponseWriter, r *http.Request, metric configuration.Metric) (start, end time.Time, step time.Duration, ok bool) {
 	if !h.historyEnabled(metric) {
 		HandleError(w, r, metric.Name, "History not enabled for this metric", http.StatusForbidden)
 		return
 	}
 
-	start, end, step, err := parseHistoryParams(r)
+	var err error
+	start, end, step, err = parseHistoryParams(r)
 	if err != nil {
 		HandleError(w, r, metric.Name, "Invalid parameter: "+err.Error(), http.StatusBadRequest)
 		return
@@ -181,6 +135,16 @@ func (h *KromgoHandler) handleHistory(w http.ResponseWriter, r *http.Request, me
 
 	if maxDur := h.historyMaxDuration(metric); maxDur > 0 && end.Sub(start) > maxDur {
 		HandleError(w, r, metric.Name, "Requested time window exceeds maximum allowed duration", http.StatusBadRequest)
+		return
+	}
+
+	ok = true
+	return
+}
+
+func (h *KromgoHandler) handleHistory(w http.ResponseWriter, r *http.Request, metric configuration.Metric) {
+	start, end, step, ok := h.validateHistoryAccess(w, r, metric)
+	if !ok {
 		return
 	}
 

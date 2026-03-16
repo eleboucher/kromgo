@@ -195,19 +195,8 @@ func renderSparkline(matrix model.Matrix, p chartParams, metricColors []configur
 }
 
 func (h *KromgoHandler) handleChart(w http.ResponseWriter, r *http.Request, metric configuration.Metric) {
-	if !h.historyEnabled(metric) {
-		HandleError(w, r, metric.Name, "History not enabled for this metric", http.StatusForbidden)
-		return
-	}
-
-	start, end, step, err := parseHistoryParams(r)
-	if err != nil {
-		HandleError(w, r, metric.Name, "Invalid parameter: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if maxDur := h.historyMaxDuration(metric); maxDur > 0 && end.Sub(start) > maxDur {
-		HandleError(w, r, metric.Name, "Requested time window exceeds maximum allowed duration", http.StatusBadRequest)
+	start, end, step, ok := h.validateHistoryAccess(w, r, metric)
+	if !ok {
 		return
 	}
 

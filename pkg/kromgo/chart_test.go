@@ -2,7 +2,7 @@ package kromgo
 
 import (
 	"fmt"
-	"os"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/common/model"
@@ -44,74 +44,71 @@ func makeMatrixLabeled(series map[string][]float64) model.Matrix {
 	return matrix
 }
 
-// TestRenderSparkline_Visual writes SVG files to /tmp so you can open them in a browser.
-func TestRenderSparkline_Visual(t *testing.T) {
-	cases := []struct {
-		name   string
-		matrix model.Matrix
-		params chartParams
-	}{
-		{
-			name:   "single_series",
-			matrix: makeMatrix([][]float64{{10, 25, 15, 40, 30, 55, 45, 60, 50, 70}}),
-			params: chartParams{width: 300, height: 80, strokeWidth: 2, legend: true},
-		},
-		{
-			name:   "flat_line",
-			matrix: makeMatrix([][]float64{{42, 42, 42, 42, 42}}),
-			params: chartParams{width: 300, height: 80, strokeWidth: 2, legend: true},
-		},
-		{
-			name:   "spike",
-			matrix: makeMatrix([][]float64{{5, 5, 5, 100, 5, 5, 5}}),
-			params: chartParams{width: 300, height: 80, strokeWidth: 2, legend: true},
-		},
-		{
-			name: "multi_series_legend",
-			matrix: makeMatrixLabeled(map[string][]float64{
-				"server1": {10, 20, 15, 30, 25, 35, 28},
-				"server2": {40, 35, 45, 30, 50, 42, 48},
-			}),
-			params: chartParams{width: 300, height: 80, strokeWidth: 2, legend: true},
-		},
-		{
-			name: "multi_series_no_legend",
-			matrix: makeMatrixLabeled(map[string][]float64{
-				"server1": {10, 20, 15, 30, 25, 35, 28},
-				"server2": {40, 35, 45, 30, 50, 42, 48},
-			}),
-			params: chartParams{width: 300, height: 80, strokeWidth: 2, legend: false},
-		},
-		{
-			name: "many_series_legend",
-			matrix: makeMatrixLabeled(map[string][]float64{
-				"web-01":  {10, 20, 15, 30, 25},
-				"web-02":  {40, 35, 45, 30, 50},
-				"db-01":   {5, 8, 6, 12, 9},
-				"cache-01": {60, 55, 65, 50, 70},
-			}),
-			params: chartParams{width: 400, height: 100, strokeWidth: 2, legend: true},
-		},
-		{
-			name:   "custom_color",
-			matrix: makeMatrix([][]float64{{10, 25, 15, 40, 30, 55, 45, 60}}),
-			params: chartParams{width: 400, height: 100, strokeWidth: 2, color: "brightgreen", legend: true},
-		},
-		{
-			name:   "wide",
-			matrix: makeMatrix([][]float64{{5, 10, 8, 15, 12, 20, 18, 25, 22, 30, 28, 35}}),
-			params: chartParams{width: 600, height: 120, strokeWidth: 3, legend: true},
-		},
+func TestRenderSparkline_Structure(t *testing.T) {
+	svg := renderSparkline(
+		makeMatrix([][]float64{{10, 25, 15, 40, 30}}),
+		chartParams{width: 300, height: 80, strokeWidth: 2, legend: true},
+		nil,
+	)
+	if !strings.HasPrefix(svg, "<svg ") {
+		t.Error("expected SVG to start with <svg")
 	}
+	if !strings.HasSuffix(svg, "</svg>") {
+		t.Error("expected SVG to end with </svg>")
+	}
+}
 
+func TestRenderSparkline_PolylineCount(t *testing.T) {
+	cases := []struct {
+		name     string
+		matrix   model.Matrix
+		wantLines int
+	}{
+		{"single", makeMatrix([][]float64{{1, 2, 3}}), 1},
+		{"two_series", makeMatrix([][]float64{{1, 2}, {3, 4}}), 2},
+		{"empty_series_skipped", func() model.Matrix {
+			m := makeMatrix([][]float64{{1, 2}, {}})
+			return m
+		}(), 1},
+	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			svg := renderSparkline(tc.matrix, tc.params, nil)
-			path := "/tmp/sparkline_" + tc.name + ".svg"
-			if err := os.WriteFile(path, []byte(svg), 0644); err != nil {
-				t.Fatalf("failed to write %s: %v", path, err)
+			svg := renderSparkline(tc.matrix, chartParams{width: 300, height: 80, strokeWidth: 2}, nil)
+			got := strings.Count(svg, "<polyline ")
+			if got != tc.wantLines {
+				t.Errorf("expected %d <polyline> elements, got %d", tc.wantLines, got)
 			}
-			t.Logf("wrote %s", path)
 		})
+	}
+}
+
+func TestRenderSparkline_LegendText(t *testing.T) {
+	matrix := makeMatrixLabeled(map[string][]float64{
+		"server1": {10, 20, 30},
+		"server2": {40, 50, 60},
+	})
+
+	withLegend := renderSparkline(matrix, chartParams{width: 300, height: 80, strokeWidth: 2, legend: true}, nil)
+	if !strings.Contains(withLegend, "server1") || !strings.Contains(withLegend, "server2") {
+		t.Error("expected legend labels in SVG when legend=true")
+	}
+
+	withoutLegend := renderSparkline(matrix, chartParams{width: 300, height: 80, strokeWidth: 2, legend: false}, nil)
+	if strings.Contains(withoutLegend, "<text ") {
+		t.Error("expected no <text> elements when legend=false")
+	}
+}
+
+func TestRenderSparkline_FlatLineNoNaN(t *testing.T) {
+	svg := renderSparkline(
+		makeMatrix([][]float64{{42, 42, 42, 42, 42}}),
+		chartParams{width: 300, height: 80, strokeWidth: 2},
+		nil,
+	)
+	if strings.Contains(svg, "NaN") {
+		t.Error("SVG contains NaN coordinates")
+	}
+	if strings.Contains(svg, "Inf") {
+		t.Error("SVG contains Inf coordinates")
 	}
 }
