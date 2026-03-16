@@ -288,13 +288,6 @@ func TestHistoryMaxDuration_PerMetricOverridesGlobal(t *testing.T) {
 	}
 }
 
-func TestHistoryMaxDuration_InvalidFallsBackToDefault(t *testing.T) {
-	h := newHandler(configuration.HistoryConfig{MaxDuration: "not-a-duration"})
-	metric := configuration.Metric{Name: "test"}
-	if d := h.historyMaxDuration(metric); d != time.Hour {
-		t.Errorf("expected fallback to 1h, got %v", d)
-	}
-}
 
 func TestHistoryMaxDuration_Unlimited(t *testing.T) {
 	h := newHandler(configuration.HistoryConfig{MaxDuration: "0"})

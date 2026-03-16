@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kashalls/kromgo/cmd/kromgo/init/configuration"
+	"github.com/kashalls/kromgo/cmd/kromgo/init/log"
 	"github.com/kashalls/kromgo/cmd/kromgo/init/prometheus"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
@@ -148,12 +149,18 @@ func (h *KromgoHandler) historyEnabled(metric configuration.Metric) bool {
 
 func (h *KromgoHandler) historyMaxDuration(metric configuration.Metric) time.Duration {
 	if metric.History != nil && metric.History.MaxDuration != "" {
-		if d, err := parseDuration(metric.History.MaxDuration); err == nil {
+		d, err := parseDuration(metric.History.MaxDuration)
+		if err != nil {
+			log.Error("invalid history.maxDuration for metric", zap.String("metric", metric.Name), zap.String("value", metric.History.MaxDuration), zap.Error(err))
+		} else {
 			return d
 		}
 	}
 	if h.Config.History.MaxDuration != "" {
-		if d, err := parseDuration(h.Config.History.MaxDuration); err == nil {
+		d, err := parseDuration(h.Config.History.MaxDuration)
+		if err != nil {
+			log.Error("invalid global history.maxDuration", zap.String("value", h.Config.History.MaxDuration), zap.Error(err))
+		} else {
 			return d
 		}
 	}

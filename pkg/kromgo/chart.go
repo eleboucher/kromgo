@@ -29,6 +29,7 @@ type chartParams struct {
 }
 
 const maxChartDimension = 2048
+const maxStrokeWidth = 20.0
 
 func parseChartParams(r *http.Request) chartParams {
 	p := chartParams{width: 300, height: 80, strokeWidth: 2, legend: true}
@@ -44,7 +45,7 @@ func parseChartParams(r *http.Request) chartParams {
 	}
 	if s := r.URL.Query().Get("stroke"); s != "" {
 		if v, err := strconv.ParseFloat(s, 64); err == nil && v > 0 {
-			p.strokeWidth = v
+			p.strokeWidth = min(v, maxStrokeWidth)
 		}
 	}
 	p.color = r.URL.Query().Get("color")
