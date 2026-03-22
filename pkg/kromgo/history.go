@@ -51,6 +51,10 @@ func parseHistoryParams(r *http.Request) (start, end time.Time, step time.Durati
 		if err != nil {
 			return
 		}
+		if d <= 0 {
+			err = errNonPositiveDuration
+			return
+		}
 		end = now
 		start = now.Add(-d)
 	} else {
@@ -93,6 +97,7 @@ func parseHistoryParams(r *http.Request) (start, end time.Time, step time.Durati
 }
 
 var errStartAfterEnd = &historyParamError{"start must be before end"}
+var errNonPositiveDuration = &historyParamError{"last must be a positive duration"}
 
 type historyParamError struct{ msg string }
 

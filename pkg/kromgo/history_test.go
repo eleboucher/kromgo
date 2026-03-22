@@ -156,6 +156,28 @@ func TestParseHistoryParams_LastInvalid(t *testing.T) {
 	}
 }
 
+func TestParseHistoryParams_LastNegative(t *testing.T) {
+	r := makeRequest(map[string]string{"last": "-1h"})
+	_, _, _, err := parseHistoryParams(r)
+	if err == nil {
+		t.Fatal("expected error for negative last param")
+	}
+	if err != errNonPositiveDuration {
+		t.Errorf("expected errNonPositiveDuration, got %v", err)
+	}
+}
+
+func TestParseHistoryParams_LastZero(t *testing.T) {
+	r := makeRequest(map[string]string{"last": "0"})
+	_, _, _, err := parseHistoryParams(r)
+	if err == nil {
+		t.Fatal("expected error for zero last param")
+	}
+	if err != errNonPositiveDuration {
+		t.Errorf("expected errNonPositiveDuration, got %v", err)
+	}
+}
+
 func TestParseHistoryParams_StartAfterEnd(t *testing.T) {
 	r := makeRequest(map[string]string{
 		"start": "1704088800",
